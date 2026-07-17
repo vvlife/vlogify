@@ -1,0 +1,10 @@
+node_modules/
+uploads/
+temp/
+outputs/
+.env
+*.log
+.DS_Store
+ui_screenshot*.png
+sub_*.png
+screenshot.js
