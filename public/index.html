@@ -667,23 +667,37 @@
       margin-left: auto;
       margin-right: auto;
       text-align: left;
-      max-height: 200px;
+      max-height: 320px;
       overflow-y: auto;
       display: flex;
-      flex-direction: column-reverse;
-      gap: 6px;
+      flex-direction: column;
+      gap: 4px;
+      padding: var(--space-sm);
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-default);
+    }
+    .processing-log::-webkit-scrollbar {
+      width: 5px;
+    }
+    .processing-log::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .processing-log::-webkit-scrollbar-thumb {
+      background: var(--border-strong);
+      border-radius: 3px;
     }
 
     .log-line {
       font-size: 0.82rem;
       color: var(--text-tertiary);
       font-family: 'SF Mono', 'Fira Code', monospace;
-      padding: 4px 12px;
+      padding: 4px 10px;
       border-left: 2px solid var(--border-default);
       animation: fadeInUp 0.3s var(--ease-out) both;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.5;
     }
 
     .log-line.active {
@@ -1513,10 +1527,12 @@
                  String(now.getMinutes()).padStart(2, '0') + ':' +
                  String(now.getSeconds()).padStart(2, '0');
       line.textContent = `[${ts}] ${text}`;
-      log.prepend(line);
-      // Keep last 20 lines
-      while (log.children.length > 20) {
-        log.removeChild(log.lastChild);
+      log.appendChild(line);
+      // Auto-scroll to bottom so latest log is visible
+      log.scrollTop = log.scrollHeight;
+      // Keep last 50 lines
+      while (log.children.length > 50) {
+        log.removeChild(log.firstChild);
       }
     }
 
