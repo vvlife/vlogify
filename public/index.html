@@ -1280,6 +1280,11 @@
 
   <script>
     // ========================================
+    // API Base — empty for same-origin, set to backend URL for cross-origin
+    // ========================================
+    const API_BASE = window.VLOGIFY_API_BASE || '';
+
+    // ========================================
     // State
     // ========================================
     const state = {
@@ -1338,7 +1343,7 @@
         const fileCard = createFileCard(file, tempId, true);
         fileList.appendChild(fileCard);
 
-        fetch('/api/upload', {
+        fetch(`${API_BASE}/api/upload`, {
           method: 'POST',
           body: formData
         })
@@ -1512,7 +1517,7 @@
       }, 3000);
 
       try {
-        const response = await fetch('/api/analyze', {
+        const response = await fetch(`${API_BASE}/api/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1651,7 +1656,7 @@
       addLogLine('开始生成 Vlog', 'active');
 
       try {
-        const response = await fetch('/api/generate', {
+        const response = await fetch(`${API_BASE}/api/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1727,7 +1732,7 @@
       const wrapper = document.getElementById('resultVideoWrapper');
       wrapper.innerHTML = `
         <video class="result-video" controls autoplay>
-          <source src="${output.videoUrl}" type="video/mp4">
+          <source src="${API_BASE}${output.videoUrl}" type="video/mp4">
           你的浏览器不支持视频播放。
         </video>
       `;
@@ -1748,7 +1753,7 @@
         </div>
       `;
 
-      document.getElementById('downloadBtn').href = output.videoUrl;
+      document.getElementById('downloadBtn').href = `${API_BASE}${output.videoUrl}`;
 
       const section = document.getElementById('resultSection');
       section.classList.add('active');
@@ -1803,7 +1808,7 @@
     // ========================================
     // Health Check
     // ========================================
-    fetch('/api/health').then(r => r.json()).then(data => {
+    fetch(`${API_BASE}/api/health`).then(r => r.json()).then(data => {
       if (!data.agnesConfigured) {
         showToast('警告：Agnes API 未配置', 'error');
       }
