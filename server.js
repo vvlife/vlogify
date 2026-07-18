@@ -159,6 +159,49 @@ function getVideoDuration(filePath) {
   });
 }
 
+// Detect video resolution and aspect ratio
+function getVideoInfo(filePath) {
+  return new Promise((resolve) => {
+    execFile('ffprobe', [
+      '-v', 'quiet',
+      '-print_format', 'json',
+      '-show_streams',
+      filePath
+    ], (err, stdout) => {
+      if (err) return resolve({ width: 1280, height: 720, duration: 0, isVertical: false });
+      try {
+        const info = JSON.parse(stdout);
+        const v = info.streams.find(s => s.codec_type === 'video');
+        const w = parseInt(v?.width) || 1280;
+        const h = parseInt(v?.height) || 720;
+        resolve({
+          width: w,
+          height: h,
+          duration: parseFloat(info.format?.duration) || 0,
+          isVertical: h > w
+        });
+      } catch {
+        resolve({ width: 1280, height: 720, duration: 0, isVertical: false });
+      }
+    });
+  });
+}
+
+// Determine the best output dimensions based on all uploaded videos
+async function determineOutputSize(files) {
+  const infos = await Promise.all(files.map(f => getVideoInfo(f.path)));
+  const verticalCount = infos.filter(i => i.isVertical).length;
+  const horizontalCount = infos.length - verticalCount;
+  if (verticalCount >= horizontalCount) {
+    const heights = infos.filter(i => i.isVertical).map(i => i.height).sort((a, b) => a - b);
+    const targetH = Math.min(Math.max(heights[Math.floor(heights.length / 2)] || 1280, 720), 1920);
+    const targetW = Math.round(targetH * 9 / 16);
+    return { width: targetW, height: targetH, isVertical: true };
+  } else {
+    return { width: 1280, height: 720, isVertical: false };
+  }
+}
+
 function extractKeyframes(filePath, outputDir, count = 5) {
   return new Promise(async (resolve, reject) => {
     const duration = await getVideoDuration(filePath).catch(() => 60);
@@ -190,9 +233,12 @@ function extractKeyframes(filePath, outputDir, count = 5) {
   });
 }
 
-function extractClip(filePath, outputDir, start, duration, name) {
+function extractClip(filePath, outputDir, start, duration, name, outputSize) {
   return new Promise((resolve, reject) => {
     const clipPath = path.join(outputDir, `${name}.mp4`);
+    const w = outputSize?.width || 720;
+    const h = outputSize?.height || 1280;
+    const scaleFilter = `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2`;
     execFile('ffmpeg', [
       '-y',
       '-ss', String(start),
@@ -203,7 +249,7 @@ function extractClip(filePath, outputDir, start, duration, name) {
       '-crf', '23',
       '-c:a', 'aac',
       '-b:a', '128k',
-      '-vf', 'scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2',
+      '-vf', scaleFilter,
       '-r', '30',
       clipPath
     ], { timeout: 60000, maxBuffer: 10 * 1024 * 1024 }, (err) => {
@@ -213,11 +259,14 @@ function extractClip(filePath, outputDir, start, duration, name) {
   });
 }
 
-function concatenateClips(clipPaths, outputPath) {
+function concatenateClips(clipPaths, outputPath, outputSize) {
   return new Promise((resolve, reject) => {
     const listPath = path.join(TEMP_DIR, `concat_${Date.now()}.txt`);
     const listContent = clipPaths.map(p => `file '${p}'`).join('\n');
     fs.writeFileSync(listPath, listContent);
+    const w = outputSize?.width || 720;
+    const h = outputSize?.height || 1280;
+    const scaleFilter = `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2`;
 
     execFile('ffmpeg', [
       '-y',
@@ -229,7 +278,7 @@ function concatenateClips(clipPaths, outputPath) {
       '-crf', '23',
       '-c:a', 'aac',
       '-b:a', '128k',
-      '-vf', 'scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2',
+      '-vf', scaleFilter,
       '-r', '30',
       outputPath
     ], { timeout: 120000, maxBuffer: 10 * 1024 * 1024 }, (err) => {
@@ -482,7 +531,7 @@ app.post('/api/analyze', async (req, res) => {
             content: [
               {
                 type: 'text',
-                text: '请用中文简要描述这个视频画面的内容，包括：场景、人物、活动、氛围、光线。用一句话概括。'
+                text: '请详细描述这个视频画面，包括以下方面：\n1. 场景环境（室内/室外、地点类型）\n2. 人物状态（人数、动作、表情、穿着）\n3. 正在发生的活动或事件\n4. 画面氛围和情绪（温馨/紧张/欢乐/宁静等）\n5. 光线条件（自然光/灯光、明暗、色温）\n6. 构图特点（特写/全景、角度、运动方向）\n请用2-3句话详细描述。'
               },
               {
                 type: 'image_url',
@@ -490,7 +539,7 @@ app.post('/api/analyze', async (req, res) => {
               }
             ]
           }
-        ], { temperature: 0.3, max_tokens: 200 });
+        ], { temperature: 0.4, max_tokens: 400 });
 
         sceneAnalyses.push({
           fileId: frame.fileId,
@@ -528,17 +577,17 @@ ${sceneAnalyses.map((s, i) =>
 
 {
   "title": "Vlog标题（有吸引力的）",
-  "summary": "一句话概述这个Vlog的内容",
+  "summary": "2-3句话概述这个Vlog的内容和亮点",
   "selectedClips": [
     {
       "fileId": "必须使用上面素材列表中的 fileId 值",
       "fileName": "文件名",
       "startTime": 开始时间秒数,
       "duration": 截取时长秒数,
-      "reason": "选择这个片段的原因"
+      "reason": "详细说明选择这个片段的原因，包括画面亮点和情感价值"
     }
   ],
-  "narration": "完整的旁白文案（中文，200-400字，有感情色彩，适合朗读）",
+  "narration": "完整的旁白文案（中文，400-800字，要求：有感情色彩、有故事感、与画面内容紧密呼应、有起承转合的结构、适合语音朗读的节奏）",
   "subtitles": [
     {
       "text": "字幕文本",
@@ -547,10 +596,10 @@ ${sceneAnalyses.map((s, i) =>
     }
   ],
   "musicMood": "推荐的音乐氛围（如：温馨、活力、怀旧、史诗）",
-  "musicDescription": "音乐风格描述",
-  "effectsPlan": ["特效1: 描述", "特效2: 描述"],
-  "transitionPlan": ["转场描述"],
-  "coverPrompt": "用于生成封面图的英文prompt"
+  "musicDescription": "详细的音乐风格描述，包括节奏、乐器、情绪走向",
+  "effectsPlan": ["特效1: 详细描述", "特效2: 详细描述"],
+  "transitionPlan": ["转场描述，包含具体的视觉效果"],
+  "coverPrompt": "用于生成封面图的英文prompt，要详细描述画面元素、色调、构图"
 }
 
 注意：
@@ -558,19 +607,22 @@ ${sceneAnalyses.map((s, i) =>
 - selectedClips 总时长控制在 30-90 秒
 - 每个clip的startTime必须在视频时长范围内
 - subtitles 的时间轴基于拼接后的视频时间线（从0开始）
-- narration 应该与画面内容呼应
+- narration 应该与画面内容紧密呼应，有叙事弧线（开头引入→发展→高潮→结尾）
+- narration 字数要充足，400-800字，不要太短
+- 每个selectedClips的reason要详细说明为何选这个片段
+- summary 要2-3句话，不要太简短
 - 只输出纯JSON，不要markdown代码块`;
 
     const planResult = await agnesChat('agnes-2.0-flash', [
       {
         role: 'system',
-        content: '你是一位专业的Vlog剪辑师和创意总监，擅长将零散素材组织成有故事感的短视频。'
+        content: '你是一位专业的Vlog剪辑师和创意总监，擅长将零散素材组织成有故事感的短视频。你的旁白文案风格细腻生动，善于用文字营造氛围和情绪，让观众沉浸其中。'
       },
       {
         role: 'user',
         content: planPrompt
       }
-    ], { temperature: 0.8, max_tokens: 4096, thinking: true });
+    ], { temperature: 0.85, max_tokens: 8192, thinking: true });
 
     // Parse the JSON from response
     let vlogPlan;
@@ -632,6 +684,10 @@ app.post('/api/generate', async (req, res) => {
   if (!vlogPlan || !files) {
     return res.status(400).json({ error: 'Missing vlog plan or files' });
   }
+
+  // Determine output size based on video orientations
+  const outputSize = await determineOutputSize(files);
+  console.log(`Output size: ${outputSize.width}x${outputSize.height} (${outputSize.isVertical ? 'vertical' : 'horizontal'})`);
 
   // === SSE setup ===
   res.setHeader('Content-Type', 'text/event-stream');
@@ -699,7 +755,8 @@ app.post('/api/generate', async (req, res) => {
         filePath, clipsDir,
         clip.startTime || 0,
         clip.duration || 10,
-        `clip_${i}`
+        `clip_${i}`,
+        outputSize
       ).catch((e) => {
         console.error(`Clip ${i} extraction error:`, e.message);
         return null;
@@ -726,7 +783,7 @@ app.post('/api/generate', async (req, res) => {
     if (clipPaths.length === 1) {
       fs.copyFileSync(clipPaths[0], concatenatedPath);
     } else {
-      await concatenateClips(clipPaths, concatenatedPath);
+      await concatenateClips(clipPaths, concatenatedPath, outputSize);
     }
     sendProgress(W.extract + W.concat, '视频拼接完成');
 
