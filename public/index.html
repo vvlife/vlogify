@@ -1325,6 +1325,8 @@
     const state = {
       sessionId: `s_${Date.now()}`,
       uploadedFiles: [],
+      pendingUploads: 0,
+      completedUploads: 0,
       selectedStyle: 'cinematic',
       vlogPlan: null,
       sceneAnalyses: null
@@ -1369,6 +1371,10 @@
       }
 
       // Upload each file
+      state.pendingUploads = (state.pendingUploads || 0) + videoFiles.length;
+      state.completedUploads = state.completedUploads || 0;
+      updateUploadStatus();
+
       videoFiles.forEach(file => {
         const formData = new FormData();
         formData.append('videos', file);
@@ -1396,19 +1402,25 @@
             fileCard.querySelector('.file-card-status').textContent = '✓ 已上传';
             fileCard.querySelector('.file-card-status').style.color = 'var(--success)';
             fileCard.classList.remove('uploading');
+            state.completedUploads++;
+            updateUploadStatus();
             
-            // Show style section
-            if (state.uploadedFiles.length > 0) {
+            // Show style section only when ALL uploads done
+            if (state.completedUploads >= state.pendingUploads && state.uploadedFiles.length > 0) {
               styleSection.style.display = 'block';
             }
           } else {
             showToast(`上传失败: ${data.error}`, 'error');
             fileCard.remove();
+            state.completedUploads++;
+            updateUploadStatus();
           }
         })
         .catch(err => {
           showToast(`上传失败: ${err.message}`, 'error');
           fileCard.remove();
+          state.completedUploads++;
+          updateUploadStatus();
         });
       });
 
@@ -1517,12 +1529,38 @@
       }
     }
 
+    // Track upload status - disable analyze button while uploads in progress
+    function updateUploadStatus() {
+      const analyzeBtn = document.getElementById('analyzeBtn');
+      const remaining = state.pendingUploads - state.completedUploads;
+      if (remaining > 0) {
+        analyzeBtn.disabled = true;
+        analyzeBtn.style.opacity = '0.5';
+        analyzeBtn.style.cursor = 'not-allowed';
+        analyzeBtn.textContent = `上传中 (${remaining} 个文件)...`;
+      } else {
+        analyzeBtn.disabled = false;
+        analyzeBtn.style.opacity = '';
+        analyzeBtn.style.cursor = '';
+        analyzeBtn.textContent = '开始 AI 分析';
+        if (state.uploadedFiles.length > 0) {
+          styleSection.style.display = 'block';
+        }
+      }
+    }
+
     // ========================================
     // Analysis (fake progress since it's a single request)
     // ========================================
     async function startAnalysis() {
       if (state.uploadedFiles.length === 0) {
         showToast('请先上传视频文件', 'error');
+        return;
+      }
+      // Block if uploads still in progress
+      const remaining = state.pendingUploads - state.completedUploads;
+      if (remaining > 0) {
+        showToast(`还有 ${remaining} 个文件正在上传，请稍候...`, 'error');
         return;
       }
 
@@ -1820,6 +1858,8 @@
     function resetAll() {
       state.sessionId = `s_${Date.now()}`;
       state.uploadedFiles = [];
+      state.pendingUploads = 0;
+      state.completedUploads = 0;
       state.vlogPlan = null;
       state.sceneAnalyses = null;
       
