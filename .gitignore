@@ -8,3 +8,5 @@ outputs/
 ui_screenshot*.png
 sub_*.png
 screenshot.js
+demo_batch.js
+frames/
