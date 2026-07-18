@@ -1,13 +1,14 @@
 {
-  "buildCommand": null,
   "outputDirectory": "public",
   "framework": null,
-  "rewrites": [],
+  "cleanUrls": true,
+  "trailingSlash": false,
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "ngrok-skip-browser-warning", "value": "true" }
+        { "key": "ngrok-skip-browser-warning", "value": "true" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
       ]
     }
   ]
