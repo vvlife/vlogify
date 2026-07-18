@@ -41,6 +41,10 @@ const TEMP_DIR = path.join(__dirname, 'temp');
 
 // === Middleware ===
 app.use(cors());
+app.use((req, res, next) => {
+  res.setHeader('ngrok-skip-browser-warning', 'true');
+  next();
+});
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/outputs', express.static(OUTPUT_DIR));
