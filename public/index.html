@@ -1531,11 +1531,12 @@
       resetProcessingUI('AI 正在分析你的素材…', '正在提取视频关键帧…');
 
       const steps = [
-        { text: '正在提取视频关键帧…', pct: 10 },
-        { text: 'AI 多模态分析场景内容…', pct: 30 },
-        { text: '生成 Vlog 制作方案…', pct: 55 },
-        { text: '整理剪辑计划…', pct: 80 },
-        { text: '分析完成！', pct: 100 }
+        { text: '正在提取视频关键帧…', pct: 8 },
+        { text: 'AI 多模态分析场景内容…', pct: 20 },
+        { text: 'AI 深入理解画面细节…', pct: 35 },
+        { text: '生成 Vlog 制作方案…', pct: 50 },
+        { text: 'AI 正在构思旁白文案…', pct: 65 },
+        { text: '整理剪辑计划…', pct: 80 }
       ];
 
       let stepIndex = 0;
@@ -1548,8 +1549,20 @@
           stepIndex++;
           addLogLine(steps[stepIndex].text, 'active');
           updateProgress(steps[stepIndex].pct, steps[stepIndex].text);
+        } else {
+          // Reached last step, hold at 85% and wait for actual response
+          updateProgress(85, 'AI 仍在思考中，请稍候…');
         }
-      }, 3000);
+      }, 4000);
+
+      // Slow creep from 85% to 90% while waiting
+      let creepPct = 85;
+      const creepInterval = setInterval(() => {
+        if (creepPct < 90) {
+          creepPct += 1;
+          updateProgress(creepPct, 'AI 仍在思考中，请稍候…');
+        }
+      }, 5000);
 
       try {
         const response = await fetch(`${API_BASE}/api/analyze`, {
@@ -1565,6 +1578,7 @@
 
         const data = await response.json();
         clearInterval(stepInterval);
+        clearInterval(creepInterval);
 
         if (data.success) {
           markLastLogDone();
@@ -1581,6 +1595,7 @@
         }
       } catch (err) {
         clearInterval(stepInterval);
+        clearInterval(creepInterval);
         showToast(`分析失败: ${err.message}`, 'error');
         document.getElementById('processingSection').classList.remove('active');
         document.getElementById('upload').style.display = 'block';
@@ -1743,7 +1758,9 @@
       if (type === 'progress') {
         markLastLogDone();
         addLogLine(data.step, 'active');
-        updateProgress(data.progress, data.step);
+        // Cap at 95% until 'done' event arrives
+        const pct = Math.min(data.progress, 95);
+        updateProgress(pct, data.step);
       } else if (type === 'done') {
         markLastLogDone();
         addLogLine('全部完成', 'done');
