@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: vlogify
+    env: docker
+    region: singapore
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: AGNES_API_KEY
+        sync: false
+      - key: AGNES_API_BASE
+        value: https://apihub.agnes-ai.com/v1
+      - key: PORT
+        value: 3456
+      - key: NODE_ENV
+        value: production
