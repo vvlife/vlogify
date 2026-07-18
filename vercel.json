@@ -1,27 +1,5 @@
 {
   "outputDirectory": "public",
   "framework": null,
-  "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "https://vlogify.onrender.com/api/$1"
-    },
-    {
-      "source": "/outputs/(.*)",
-      "destination": "https://vlogify.onrender.com/outputs/$1"
-    },
-    {
-      "source": "/uploads/(.*)",
-      "destination": "https://vlogify.onrender.com/uploads/$1"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" }
-      ]
-    }
-  ]
+  "cleanUrls": true
 }
